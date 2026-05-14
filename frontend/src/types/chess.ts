@@ -1,6 +1,10 @@
 export type PieceType =
+  | "Pawn"
   | "Rook"
-  | "Knight";
+  | "Knight"
+  | "Bishop"
+  | "Queen"
+  | "King";
 
 export type PieceColor =
   | "White"

@@ -13,3 +13,4 @@ D:\Sah\Chess.Application\obj\Debug\net10.0\Chess.Application.dll
 D:\Sah\Chess.Application\obj\Debug\net10.0\refint\Chess.Application.dll
 D:\Sah\Chess.Application\obj\Debug\net10.0\Chess.Application.pdb
 D:\Sah\Chess.Application\obj\Debug\net10.0\ref\Chess.Application.dll
+D:\Sah\Chess.Application\obj\Debug\net10.0\Chess.Application.sourcelink.json

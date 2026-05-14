@@ -9,3 +9,4 @@ D:\Sah\Chess.Core\obj\Debug\net10.0\Chess.Core.dll
 D:\Sah\Chess.Core\obj\Debug\net10.0\refint\Chess.Core.dll
 D:\Sah\Chess.Core\obj\Debug\net10.0\Chess.Core.pdb
 D:\Sah\Chess.Core\obj\Debug\net10.0\ref\Chess.Core.dll
+D:\Sah\Chess.Core\obj\Debug\net10.0\Chess.Core.sourcelink.json

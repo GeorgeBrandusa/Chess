@@ -2,6 +2,10 @@ namespace Chess.Core.Entities;
 
 public enum PieceType
 {
+    Pawn,
     Rook,
-    Knight
+    Knight,
+    Bishop,
+    Queen,
+    King
 }

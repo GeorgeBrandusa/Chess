@@ -35,3 +35,4 @@ D:\Sah\Chess.Api\obj\Debug\net10.0\refint\Chess.Api.dll
 D:\Sah\Chess.Api\obj\Debug\net10.0\Chess.Api.pdb
 D:\Sah\Chess.Api\obj\Debug\net10.0\Chess.Api.genruntimeconfig.cache
 D:\Sah\Chess.Api\obj\Debug\net10.0\ref\Chess.Api.dll
+D:\Sah\Chess.Api\obj\Debug\net10.0\Chess.Api.sourcelink.json
