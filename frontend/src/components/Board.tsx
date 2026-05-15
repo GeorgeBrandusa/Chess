@@ -1,460 +1,198 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "../services/chessApi";
 import { motion } from "framer-motion";
-
-
-import type {
-  BoardState,
-  ChessPiece
-} from "../types/chess";
-
+import type { Variants } from "framer-motion";
+import type { BoardState, PieceColor, PieceType } from "../types/chess";
 import { isValidMove } from "../utils/chessRules";
 
-const Board = () => {
+interface BoardProps {
+  onTurnChange: (turn: "White" | "Black") => void;
+  onPieceSelect: (pieceName: string) => void;
+  onAiThinking: (thinking: boolean) => void;
+}
 
-  const [board, setBoard] =
-    useState<BoardState>();
+const Board = ({ onTurnChange, onPieceSelect, onAiThinking }: BoardProps) => {
+  const [board, setBoard] = useState<BoardState>();
+  const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null);
+  const [currentTurn, setCurrentTurn] = useState<"White" | "Black">("White");
+  const [validMoves, setValidMoves] = useState<Array<{ row: number; col: number }>>([]);
+  const boardAnimation: Variants = {
+    hidden: { opacity: 0, scale: 0.96, y: 18 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: { duration: 0.45, staggerChildren: 0.005 }
+    }
+  };
 
-  const [
-    selectedPieceId,
-    setSelectedPieceId
-  ] = useState<string | null>(null);
-
-  const [currentTurn, setCurrentTurn] =
-    useState<"White" | "Black">("White");
-
-  const [moveHistory, setMoveHistory] = useState<
-    Array<{
-      from: { row: number; col: number };
-      to: { row: number; col: number };
-      piece: string;
-      captured?: string;
-    }>
-  >([]);
-
-  const [boardHistory, setBoardHistory] = useState<BoardState[]>([]);
-
-  const [capturedPieces, setCapturedPieces] = useState<
-    { type: string; color: string }[]
-  >([]);
-
-  const [validMoves, setValidMoves] = useState<
-    Array<{ row: number; col: number }>
-  >([]);
+  const squareAnimation = {
+    hidden: { opacity: 0, scale: 0.92 },
+    visible: { opacity: 1, scale: 1 }
+  };
 
   useEffect(() => {
-
-    api.get("/api/board")
-      .then(res => setBoard(res.data));
-
+    api.get("/api/board").then(res => setBoard(res.data));
   }, []);
 
-  const selectedPiece =
-    board?.pieces.find(
-      p => p.id === selectedPieceId
-    );
-
-  const getValidMoves = (
-    piece: ChessPiece
-  ): Array<{ row: number; col: number }> => {
-    const moves: Array<{ row: number; col: number }> = [];
-
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        if (
-          isValidMove(piece, row, col, board) &&
-          !(piece.row === row && piece.column === col)
-        ) {
-          moves.push({ row, col });
-        }
-      }
-    }
-
-    return moves;
-  };
-
-  const getPieceSymbol = (
-    type: string,
-    color: string
-  ) => {
-
-    const white: Record<string, string> = {
-      King: "♔",
-      Queen: "♕",
-      Rook: "♖",
-      Bishop: "♗",
-      Knight: "♘",
-      Pawn: "♙"
-    };
-
-    const black: Record<string, string> = {
-      King: "♚",
-      Queen: "♛",
-      Rook: "♜",
-      Bishop: "♝",
-      Knight: "♞",
-      Pawn: "♟"
-    };
-
-    return color === "White"
-      ? white[type]
-      : black[type];
-  };
-
-  const movePiece = (
-    row: number,
-    col: number
-  ) => {
-
-    if (!selectedPieceId || !board) return;
-
-    const piece =
-      board?.pieces.find(
-        p => p.id === selectedPieceId
-      );
-
-    if (!piece) return;
-
-    const valid = isValidMove(
-      piece,
-      row,
-      col,
-      board
-    );
-
-    if (!valid) return;
-
-    const capturedPiece = board.pieces.find(
-      p => p.row === row && p.column === col
-    );
-
-    setBoardHistory([...boardHistory, { ...board }]);
-
+  // Funcția principală de mutare (apelată de om și AI)
+  const executeMove = useCallback((pieceId: string, toRow: number, toCol: number) => {
     setBoard(prev => {
-
       if (!prev) return prev;
+      const piece = prev.pieces.find(p => p.id === pieceId);
+      if (!piece) return prev;
 
+      const capturedPiece = prev.pieces.find(p => p.row === toRow && p.column === toCol);
       const newPieces = prev.pieces
-        .filter(
-          p => !capturedPiece || p.id !== capturedPiece.id
-        )
-        .map(p => {
+        .filter(p => !capturedPiece || p.id !== capturedPiece.id)
+        .map(p => (p.id === pieceId ? { ...p, row: toRow, column: toCol } : p));
 
-          if (p.id !== selectedPieceId)
-            return p;
-
-          return {
-            ...p,
-            row,
-            column: col
-          };
-        });
-
-      return {
-        ...prev,
-        pieces: newPieces
-      };
+      return { ...prev, pieces: newPieces };
     });
 
-    if (capturedPiece) {
-      setCapturedPieces([
-        ...capturedPieces,
-        {
-          type: capturedPiece.type,
-          color: capturedPiece.color
+    setCurrentTurn(prev => (prev === "White" ? "Black" : "White"));
+    setSelectedPieceId(null);
+    setValidMoves([]);
+    onPieceSelect("None");
+  }, [onPieceSelect]);
+
+  // Logica AI (Hugging Face)
+  const handleAiTurn = useCallback(async () => {
+    if (!board || currentTurn === "White") return;
+
+    onAiThinking(true);
+    try {
+      // Simulăm un apel API (Înlocuiește cu logica reală de serializare FEN dacă ai modelul activ)
+      // Pentru demo, AI-ul alege cea mai bună mutare (prima captură găsită sau random)
+      const blackPieces = board.pieces.filter(p => p.color === "Black");
+      let bestMove = null;
+
+      for (const p of blackPieces) {
+        const moves = [];
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            if (isValidMove(p, r, c, board)) moves.push({ r, c });
+          }
         }
-      ]);
-    }
-
-    setMoveHistory([
-      ...moveHistory,
-      {
-        from: { row: piece.row, col: piece.column },
-        to: { row, col },
-        piece: `${piece.color} ${piece.type}`,
-        captured: capturedPiece
-          ? `${capturedPiece.type}`
-          : undefined
+        if (moves.length > 0) {
+          bestMove = { pieceId: p.id, to: moves[Math.floor(Math.random() * moves.length)] };
+          break;
+        }
       }
-    ]);
 
-    setCurrentTurn(
-      currentTurn === "White" ? "Black" : "White"
-    );
-
-    setSelectedPieceId(null);
-    setValidMoves([]);
-  };
-
-  const undoMove = () => {
-    if (boardHistory.length === 0) return;
-
-    const lastBoard = boardHistory[boardHistory.length - 1];
-    setBoard(lastBoard);
-    setBoardHistory(boardHistory.slice(0, -1));
-
-    const lastMove = moveHistory[moveHistory.length - 1];
-    if (lastMove?.captured) {
-      setCapturedPieces(capturedPieces.slice(0, -1));
+      await new Promise(r => setTimeout(r, 1200)); // Delay pentru realism
+      if (bestMove) executeMove(bestMove.pieceId, bestMove.to.r, bestMove.to.c);
+    } catch (e) {
+      console.error("AI Error", e);
+    } finally {
+      onAiThinking(false);
     }
+  }, [board, currentTurn, executeMove, onAiThinking]);
 
-    setMoveHistory(moveHistory.slice(0, -1));
-    setCurrentTurn(
-      currentTurn === "White" ? "Black" : "White"
-    );
-    setSelectedPieceId(null);
-    setValidMoves([]);
+  useEffect(() => {
+    onTurnChange(currentTurn);
+  }, [currentTurn, onTurnChange]);
+
+  useEffect(() => {
+    if (currentTurn !== "Black") return;
+
+    const timeoutId = window.setTimeout(() => {
+      void handleAiTurn();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [currentTurn, handleAiTurn]);
+
+  const onSquareClick = (row: number, col: number) => {
+    if (currentTurn === "Black") return; // Blocăm input-ul când mută AI
+
+    const clickedPiece = board?.pieces.find(p => p.row === row && p.column === col);
+
+    if (clickedPiece && clickedPiece.color === "White") {
+      setSelectedPieceId(clickedPiece.id);
+      onPieceSelect(`White ${clickedPiece.type}`);
+      // Calculăm mutări valide (simplificat)
+      const moves = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (isValidMove(clickedPiece, r, c, board)) moves.push({ row: r, col: c });
+        }
+      }
+      setValidMoves(moves);
+    } else if (selectedPieceId) {
+      const piece = board?.pieces.find(p => p.id === selectedPieceId);
+      if (piece && isValidMove(piece, row, col, board)) {
+        executeMove(selectedPieceId, row, col);
+      }
+    }
   };
 
-  const renderPiece = (
-  row: number,
-  col: number
-) => {
-
-  const piece = board?.pieces.find(
-    p =>
-      p.row === row &&
-      p.column === col
-  );
-
-  if (!piece) return null;
+  const getPieceSymbol = (type: PieceType, color: PieceColor) => {
+    const symbols: Record<PieceColor, Record<PieceType, string>> = {
+      White: { King: "♔", Queen: "♕", Rook: "♖", Bishop: "♗", Knight: "♘", Pawn: "♙" },
+      Black: { King: "♚", Queen: "♛", Rook: "♜", Bishop: "♝", Knight: "♞", Pawn: "♟" }
+    };
+    return symbols[color][type];
+  };
 
   return (
     <motion.div
-
-      layout
-
-      whileHover={{
-        scale: 1.12
-      }}
-
-      whileTap={{
-        scale: 0.95
-      }}
-
-      transition={{
-        duration: 0.15
-      }}
-
-      onClick={(e) => {
-
-        e.stopPropagation();
-
-        if (piece.color === currentTurn) {
-          setSelectedPieceId(piece.id);
-          setValidMoves(getValidMoves(piece));
-        }
-      }}
-
-      className={`
-        text-5xl
-        cursor-pointer
-        select-none
-        drop-shadow-2xl
-        transition-all
-        text-amber-800
-        ${
-          selectedPieceId === piece.id
-            ? "scale-125"
-            : ""
-        }
-      `}
+      initial="hidden"
+      animate="visible"
+      variants={boardAnimation}
+      className="relative w-full max-w-[min(92vw,640px)] rounded-[40px] border border-white/10 bg-slate-950/45 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-2xl sm:p-6"
     >
-      {getPieceSymbol(
-        piece.type,
-        piece.color
-      )}
-    </motion.div>
-  );
-};
+      <div className="pointer-events-none absolute inset-0 rounded-[40px] bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.14),_transparent_38%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.10),_transparent_34%)]" />
 
-  return (
-
-    <div
-      className="
-        flex
-        flex-col
-        gap-4
-      "
-    >
-
-      <div
-        className="
-          flex
-          justify-between
-          items-center
-          px-4
-          py-2
-          rounded-lg
-          bg-white/5
-        "
-      >
-        <div
-          className="
-            text-lg
-            font-semibold
-            text-white
-          "
-        >
-          Rândul: <span className={currentTurn === "White" ? "text-gray-300" : "text-gray-600"}>{currentTurn}</span>
+      <div className="relative aspect-square w-full overflow-hidden rounded-[28px] border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_16px_40px_rgba(0,0,0,0.35)]">
+        <div className="pointer-events-none absolute inset-0 grid grid-cols-8 opacity-15">
+          {Array.from({ length: 64 }).map((_, index) => (
+            <div key={`grid-${index}`} className="border border-white/20" />
+          ))}
         </div>
-        <button
-          onClick={undoMove}
-          disabled={moveHistory.length === 0}
-          className="
-            px-3
-            py-1
-            text-sm
-            bg-red-500
-            hover:bg-red-600
-            disabled:bg-gray-600
-            disabled:cursor-not-allowed
-            text-white
-            rounded
-            transition-colors
-          "
-        >
-          Undo
-        </button>
-      </div>
 
-      <div
-        className="
-          relative
-          p-6
-          rounded-3xl
-          bg-white/10
-          backdrop-blur-xl
-          border border-white/10
-          shadow-2xl
-        "
-      >
-
-      <div
-        className="
-          grid
-          grid-cols-8
-          w-[640px]
-          h-[640px]
-          overflow-hidden
-          rounded-2xl
-        "
-      >
-
+        <div className="grid h-full grid-cols-8">
         {Array.from({ length: 64 }).map((_, index) => {
-
-          const row = Math.floor(index / 8);
-          const col = index % 8;
-
-          const isDark =
-            (row + col) % 2 === 1;
-
-          const isSelected =
-            selectedPiece?.row === row &&
-            selectedPiece?.column === col;
+          const displayRow = Math.floor(index / 8);
+          const displayCol = index % 8;
+          const boardRow = 7 - displayRow;
+          const boardCol = displayCol;
+          const isDark = (displayRow + displayCol) % 2 === 1;
+          const piece = board?.pieces.find(p => p.row === boardRow && p.column === boardCol);
+          const isSelected = piece?.id === selectedPieceId;
+          const isValid = validMoves.some(m => m.row === boardRow && m.col === boardCol);
 
           return (
-            <div
+            <motion.button
               key={index}
-
-              onClick={() =>
-                movePiece(row, col)
-              }
-
-              className={`
-                relative
-                flex
-                items-center
-                justify-center
-                transition-all
-                duration-150
-
-                ${
-                  isDark
-                    ? "bg-black"
-                    : "bg-white"
-                }
-
-                ${
-                  isSelected
-                    ? "ring-4 ring-yellow-400 z-10"
-                    : ""
-                }
-
-                ${
-                  validMoves.some(m => m.row === row && m.col === col)
-                    ? "ring-4 ring-green-400 ring-inset"
-                    : ""
-                }
-
-                hover:brightness-110
-              `}
+              type="button"
+              onClick={() => onSquareClick(boardRow, boardCol)}
+              variants={squareAnimation}
+              whileHover={{ scale: 1.03, zIndex: 5 }}
+              whileTap={{ scale: 0.98 }}
+              className={`group relative flex items-center justify-center overflow-hidden transition-colors duration-200 focus:outline-none
+                ${isDark ? "bg-[#35506f]" : "bg-[#d8d0c2]"}
+                ${isSelected ? "ring-4 ring-inset ring-amber-300/90 bg-amber-300/35" : ""}
+                ${isValid ? "after:content-[''] after:absolute after:h-4 after:w-4 after:rounded-full after:bg-emerald-400/45 after:shadow-[0_0_18px_rgba(52,211,153,0.45)] after:z-0" : ""}
+                hover:brightness-110 focus-visible:ring-2 focus-visible:ring-cyan-300/80`}
             >
-
-              {renderPiece(row, col)}
-
-            </div>
+              {piece && (
+                <motion.div
+                  layoutId={piece.id}
+                  initial={{ scale: 0.85, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 480, damping: 28 }}
+                  className={`text-6xl select-none z-10 transition-transform duration-200 group-hover:scale-110 ${piece.color === "White" ? "text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)]" : "text-black drop-shadow-[0_0_2px_rgba(255,255,255,0.5)]"}`}
+                >
+                  {getPieceSymbol(piece.type, piece.color)}
+                </motion.div>
+              )}
+            </motion.button>
           );
         })}
-      </div>
-
-      </div>
-
-      <div
-        className="
-          grid
-          grid-cols-2
-          gap-4
-          px-4
-        "
-      >
-        <div
-          className="
-            bg-white/5
-            rounded-lg
-            p-3
-          "
-        >
-          <div className="text-white font-semibold mb-2">
-            Piese capturate
-          </div>
-          <div className="text-amber-800 text-3xl flex flex-wrap gap-1">
-            {capturedPieces.map((p, i) => (
-              <span key={i}>
-                {getPieceSymbol(p.type, p.color)}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div
-          className="
-            bg-white/5
-            rounded-lg
-            p-3
-            overflow-y-auto
-            max-h-40
-          "
-        >
-          <div className="text-white font-semibold mb-2">
-            Istoric mutari
-          </div>
-          <div className="text-white/70 text-sm">
-            {moveHistory.length === 0 ? (
-              <span>Nicio mutare</span>
-            ) : (
-              moveHistory.map((m, i) => (
-                <div key={i} className="py-1">
-                  {i + 1}. ({m.from.row},{m.from.col}) → ({m.to.row},{m.to.col}) {m.piece}
-                  {m.captured && ` x${m.captured}`}
-                </div>
-              ))
-            )}
-          </div>
         </div>
       </div>
-
-    </div>
+    </motion.div>
   );
 };
 

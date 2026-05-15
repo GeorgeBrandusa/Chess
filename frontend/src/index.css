@@ -1,20 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  font-family: "Inter", sans-serif;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   min-width: 100vw;
   min-height: 100vh;
+  overflow-x: hidden;
+  background: #04070d;
+  color: white;
+}
 
-  background:
-    radial-gradient(
-      circle at top,
-      #1e293b,
-      #0f172a
-    );
+#root {
+  min-height: 100vh;
+}
 
+::selection {
+  background: rgba(56, 189, 248, 0.35);
   color: white;
 }
