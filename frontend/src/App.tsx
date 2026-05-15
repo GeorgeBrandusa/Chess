@@ -1,11 +1,65 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Board from "./components/Board";
+import { api } from "./services/chessApi";
+import type { GameClockState } from "./types/chess";
 
 function App() {
   const [status, setStatus] = useState<"White" | "Black">("White");
   const [selectedPieceName, setSelectedPieceName] = useState<string>("None");
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const [isAiEnabled, setIsAiEnabled] = useState(true);
+  const [whiteTime, setWhiteTime] = useState(10 * 60);
+  const [blackTime, setBlackTime] = useState(10 * 60);
+
+  useEffect(() => {
+    const syncClock = async () => {
+      try {
+        const response = await api.get<GameClockState>("/api/game-clock");
+        const clock = response.data;
+
+        console.log("Clock data received:", clock);
+        console.log("White time:", clock.whiteTimeSeconds, "Black time:", clock.blackTimeSeconds);
+
+        setStatus(clock.currentTurn);
+        setWhiteTime(clock.whiteTimeSeconds);
+        setBlackTime(clock.blackTimeSeconds);
+      } catch (error) {
+        console.error("Failed to sync game clock", error);
+      }
+    };
+
+    void syncClock();
+    const timerId = window.setInterval(() => {
+      void syncClock();
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, []);
+
+  useEffect(() => {
+    const syncTurn = async () => {
+      try {
+        await api.post("/api/game-clock/turn", { turn: status });
+      } catch (error) {
+        console.error("Failed to update backend turn", error);
+      }
+    };
+
+    void syncTurn();
+  }, [status]);
+
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const remainingSeconds = (seconds % 60).toString().padStart(2, "0");
+
+    return `${minutes}:${remainingSeconds}`;
+  };
+
+  const whiteActive = status === "White";
+  const blackActive = status === "Black";
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#07111f] text-white">
@@ -23,6 +77,7 @@ function App() {
             onTurnChange={setStatus}
             onPieceSelect={setSelectedPieceName}
             onAiThinking={setIsAiThinking}
+            isAiEnabled={isAiEnabled}
           />
 
           <motion.aside
@@ -37,9 +92,6 @@ function App() {
                 <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
                   Chess Arena
                 </h1>
-                <p className="mt-2 text-sm leading-6 text-white/55">
-                  O interfață mai curată, mai dramatică și mai apropiată de un board modern.
-                </p>
               </div>
 
               <motion.div
@@ -93,18 +145,49 @@ function App() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-3xl border border-white/10 bg-white/6 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Tur</p>
-                  <p className="mt-2 text-base font-medium text-white">{status}</p>
-                </div>
-                <div className="rounded-3xl border border-white/10 bg-white/6 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Motor</p>
-                  <p className="mt-2 text-base font-medium text-white">Framer Motion</p>
-                </div>
+                <motion.div
+                  animate={whiteActive ? { scale: 1.02, y: -2 } : { scale: 1, y: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className={`rounded-3xl border p-4 ${whiteActive ? "border-cyan-300/40 bg-cyan-400/12 shadow-[0_0_24px_rgba(34,211,238,0.12)]" : "border-white/10 bg-white/6"}`}
+                >
+                  <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Alb</p>
+                  <p className="mt-2 text-2xl font-semibold tabular-nums text-white">{formatTime(whiteTime)}</p>
+                  <p className="mt-1 text-xs text-white/45">{whiteActive ? "La mutare" : "Așteaptă"}</p>
+                </motion.div>
+                <motion.div
+                  animate={blackActive ? { scale: 1.02, y: -2 } : { scale: 1, y: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className={`rounded-3xl border p-4 ${blackActive ? "border-fuchsia-300/40 bg-fuchsia-500/12 shadow-[0_0_24px_rgba(217,70,239,0.12)]" : "border-white/10 bg-white/6"}`}
+                >
+                  <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Negru</p>
+                  <p className="mt-2 text-2xl font-semibold tabular-nums text-white">{formatTime(blackTime)}</p>
+                  <p className="mt-1 text-xs text-white/45">{blackActive ? "La mutare" : "Așteaptă"}</p>
+                </motion.div>
               </div>
 
-              <div className="rounded-3xl border border-cyan-400/15 bg-cyan-500/8 p-4 text-sm leading-6 text-white/70">
-                Hover pe tablă pentru feedback, mutări evidențiate și o prezentare mai curată a jocului.
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">Tur curent</p>
+                <p className="mt-2 text-lg font-medium text-cyan-200">
+                  {status === "White" ? "Alb" : "Negru"}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsAiEnabled(!isAiEnabled)}
+                className={`rounded-3xl border p-4 font-semibold transition-all duration-300 ${
+                  isAiEnabled
+                    ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-200"
+                    : "border-fuchsia-400/40 bg-fuchsia-500/12 text-fuchsia-200"
+                }`}
+              >
+                <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Mod joc</p>
+                <p className="mt-2 text-base font-medium">
+                  {isAiEnabled ? "vs AI" : "1 vs 1"}
+                </p>
+              </button>
+
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/70 text-center">
+                Chess Arena 2026
               </div>
 
               <div className="pt-2 text-center text-[10px] uppercase tracking-[0.35em] text-white/30">

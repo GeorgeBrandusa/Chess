@@ -21,3 +21,10 @@ export interface ChessPiece {
 export interface BoardState {
   pieces: ChessPiece[];
 }
+
+export interface GameClockState {
+  currentTurn: PieceColor;
+  whiteTimeSeconds: number;
+  blackTimeSeconds: number;
+  isGameOver: boolean;
+}

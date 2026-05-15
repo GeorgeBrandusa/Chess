@@ -4,10 +4,23 @@ import type { BoardState } from "../types/chess";
 const HF_API_URL = "https://api-inference.huggingface.co/models/m-v-p/chess-move-prediction";
 const HF_TOKEN = "hf_xxxxxxxxxxxx"; // Cheia ta de la Hugging Face
 
-const serializeBoard = (board: BoardState) =>
-  board.pieces
-    .map(piece => `${piece.color[0]}${piece.type[0]}@${piece.row},${piece.column}`)
-    .join(";");
+const serializeBoard = (board: BoardState): string => {
+  // Convert board state to a simple string representation for the AI model
+  let boardString = "";
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const piece = board.pieces.find(p => p.row === row && p.column === col);
+      if (piece) {
+        const symbol = piece.type[0] + (piece.color === "White" ? "W" : "B");
+        boardString += symbol;
+      } else {
+        boardString += ".";
+      }
+    }
+    boardString += "/";
+  }
+  return boardString;
+};
 
 export const getBestMoveFromAI = async (board: BoardState) => {
   try {
